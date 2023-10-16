@@ -300,7 +300,9 @@
                 throw new Exception($"Imposible cargar datos del cultivo {idUnidadCultivo}.");
 
             pUnidadCultivoExtensionM2 = DB.UnidadCultivoExtensionM2(idUnidadCultivo, idTemporada);
-
+            if (pUnidadCultivoExtensionM2==0) {
+                throw new Exception($"La superficie de la unidad  de cultivo '{IdUnidadCultivo}' es 0.");
+            }
             if ((UnidadCultivoCultivoEtapasList = DB.UnidadCultivoCultivoEtapasList(idUnidadCultivo, idTemporada)).Count == 0)
                 throw new Exception($"Imposible cargar las etapas para la unidad de cultivo {idUnidadCultivo}.");
             

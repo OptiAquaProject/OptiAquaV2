@@ -183,14 +183,14 @@
         public static Database ConexionOptiaqua {
             get {
                 var cnnStr = ConfigurationManager.ConnectionStrings[DB.CadenaConexionOptiAqua].ConnectionString;
-                return new Database(cnnStr, DatabaseType.SqlServer2012, System.Data.SqlClient.SqlClientFactory.Instance);
+                return new Database(cnnStr, DatabaseType.SqlServer2012, Microsoft.Data.SqlClient.SqlClientFactory.Instance);
             }
         }
 
         public static Database ConexionNebula {
             get {
                 var cnnStr = ConfigurationManager.ConnectionStrings[DB.CadenaConexionNebula].ConnectionString;
-                return new Database(cnnStr, DatabaseType.SqlServer2012, System.Data.SqlClient.SqlClientFactory.Instance);
+                return new Database(cnnStr, DatabaseType.SqlServer2012, Microsoft.Data.SqlClient.SqlClientFactory.Instance);
             }
         }
 
@@ -785,12 +785,13 @@
             if (temporada == null) {
                 temporada = Temporada(DB.TemporadaActiva());
             }
+            idTemporada = temporada.IdTemporada;
 
             var idEstacion = DB.EstacionDeUC(idUnidadCultivo, idTemporada);
             UnidadCultivo uc = UnidadCultivo(idUnidadCultivo);
             UnidadCultivoCultivo ucc = UnidadCultivoCultivo(idUnidadCultivo, idTemporada);
-
-            //string estacion = Estacion(idEstacion).Nombre;
+            if (ucc == null)
+                throw new Exception($"No se encontró la unidad de cultivo '{idUnidadCultivo}' para la temporada'{idTemporada}'");
 
             DateTime desdeFecha = ucc.FechaSiembra() ?? temporada.FechaInicial;
             DateTime hastaFecha = temporada.FechaFinal < DateTime.Today ? DateTime.Today : temporada.FechaFinal;
@@ -904,21 +905,21 @@
         }
 
         /// <summary>
-        /// UnidadCultivoList.
+        /// 
+        /// UnidadCultivoList
         /// </summary>
-        /// <param name="idTemporada">IdTemporada<see cref="string"/>.</param>
-        /// <param name="idUnidadCultivo">IdUnidadCultivo<see cref="string"/>.</param>
-        /// <param name="idRegante">IdRegante<see cref="string"/>.</param>
-        /// <param name="idCultivo">IdCultivo<see cref="string"/>.</param>
-        /// <param name="idMunicipio">idMunicipio<see cref="string"/>.</param>
-        /// <param name="idTipoRiego">IdTipoRiego<see cref="string"/>.</param>
-        /// <param name="idEstacion">IdEstacion<see cref="string"/>.</param>
+        /// <param name="idTemporada"></param>
+        /// <param name="idUnidadCultivo"></param>
+        /// <param name="idRegante"></param>
+        /// <param name="idCultivo"></param>
+        /// <param name="idMunicipio"></param>
+        /// <param name="idTipoRiego"></param>
         /// <param name="idPoligono"></param>
         /// <param name="idParcela"></param>
-        /// <param name="search">Search<see cref="string"/>.</param>
-        /// <param name="idUsuario">.</param>
-        /// <param name="role">.</param>
-        /// <returns><see cref="object"/>.</returns>
+        /// <param name="search"></param>
+        /// <param name="idUsuario"></param>
+        /// <param name="role"></param>
+        /// <returns></returns>
         public static object UnidadCultivoList(string idTemporada, string idUnidadCultivo, string idRegante, string idCultivo, string idMunicipio, string idTipoRiego, string idPoligono, string idParcela, string search, int idUsuario, string role) {
             idTemporada = idTemporada.Unquoted();
             Database db = DB.ConexionOptiaqua;
@@ -1018,7 +1019,8 @@
                 dat.Parcelas = parcelas;
                 dat.Poligonos = poligonos;
                 dat.RefCatastrales = refCatastrales;
-            }
+                dat.IdEstacion = EstacionDeUC(dat.IdUnidadCultivo, idTemporada);
+            }            
             ret.RemoveAll(x => x.IdTemporada == null);
             return ret;
         }
@@ -2356,7 +2358,7 @@
             Database db = DB.ConexionOptiaqua;
             string sql = "Select SuperficieM2 From UnidadCultivoCultivo Where IdUnidadCultivo=@0 and IdTemporada=@1";
             ret = db.SingleOrDefault<float?>(sql, idUnidadCultivo, idTemporada);
-            if (ret != null)
+            if (ret != null && (double)ret!=0)
                 return (double)ret;
             sql = " SELECT TOP(1) SuperficieM2 FROM UnidadCultivoCultivo WHERE(IdTemporada = @0) ORDER BY IdTemporada DESC";
             ret = db.SingleOrDefault<float?>(sql, idUnidadCultivo);
@@ -2369,6 +2371,9 @@
             sql += " GROUP BY dbo.UnidadCultivoParcela.IdUnidadCultivo, dbo.UnidadCultivoParcela.IdTemporada ";
             sql += " HAVING(dbo.UnidadCultivoParcela.IdUnidadCultivo =@0) AND(dbo.UnidadCultivoParcela.IdTemporada =@1)";
             ret = db.SingleOrDefault<double?>(sql, idUnidadCultivo, idTemporada);
+            if (ret!=null && ret != 0) {
+                db.Execute($"update UnidadCultivoCultivo set SuperficieM2={ret} where IdUnidadCultivo='{idUnidadCultivo}' and IdTemporada='{idTemporada}'");
+            }
 
             return ret ?? 0;
         }

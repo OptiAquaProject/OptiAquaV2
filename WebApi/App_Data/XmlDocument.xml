@@ -998,21 +998,21 @@
         </member>
         <member name="M:DatosOptiaqua.DB.UnidadCultivoList(System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.String,System.Int32,System.String)">
             <summary>
-            UnidadCultivoList.
+            
+            UnidadCultivoList
             </summary>
-            <param name="idTemporada">IdTemporada<see cref="T:System.String"/>.</param>
-            <param name="idUnidadCultivo">IdUnidadCultivo<see cref="T:System.String"/>.</param>
-            <param name="idRegante">IdRegante<see cref="T:System.String"/>.</param>
-            <param name="idCultivo">IdCultivo<see cref="T:System.String"/>.</param>
-            <param name="idMunicipio">idMunicipio<see cref="T:System.String"/>.</param>
-            <param name="idTipoRiego">IdTipoRiego<see cref="T:System.String"/>.</param>
-            <param name="idEstacion">IdEstacion<see cref="T:System.String"/>.</param>
+            <param name="idTemporada"></param>
+            <param name="idUnidadCultivo"></param>
+            <param name="idRegante"></param>
+            <param name="idCultivo"></param>
+            <param name="idMunicipio"></param>
+            <param name="idTipoRiego"></param>
             <param name="idPoligono"></param>
             <param name="idParcela"></param>
-            <param name="search">Search<see cref="T:System.String"/>.</param>
-            <param name="idUsuario">.</param>
-            <param name="role">.</param>
-            <returns><see cref="T:System.Object"/>.</returns>
+            <param name="search"></param>
+            <param name="idUsuario"></param>
+            <param name="role"></param>
+            <returns></returns>
         </member>
         <member name="M:DatosOptiaqua.DB.TemporadaActiva">
             <summary>
