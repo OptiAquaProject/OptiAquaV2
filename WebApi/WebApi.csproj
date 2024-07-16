@@ -410,6 +410,8 @@
     <Compile Include="Importacion\DB.cs" />
     <Compile Include="Importacion\ImportMapas.cs" />
     <Compile Include="Importacion\Models.cs" />
+    <Compile Include="Siar\Models.cs" />
+    <Compile Include="Siar\DatosClimaticos.cs" />
     <Compile Include="Logica Agrónoma\Calculos Hídricos.cs" />
     <Compile Include="Logica Agrónoma\Balance Hidrico.cs" />
     <Compile Include="Datos\DatosHidricos.cs" />

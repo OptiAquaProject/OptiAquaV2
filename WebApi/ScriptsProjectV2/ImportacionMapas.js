@@ -1,8 +1,8 @@
 ﻿
-function ConfirmarEliminacion(idVersion) {
-    var result = confirm("Está seguro de eliminar la versión: " + idVersion);
+function ConfirmarEliminacion(idVersion,nivel) {
+    var result = confirm("Está seguro de eliminar la versión: " + idVersion + " nivel: "+ nivel);
     if (result) {
-        var paramJson = idVersion;
+        var paramJson = { idVersion ,nivel};
         callAction("/importacion/EliminarMapas/", { paramJson: paramJson }, function (res) {
             location.reload();
         });
@@ -14,24 +14,27 @@ function ConfirmarEliminacion(idVersion) {
 function BtnImportar() {
     event.preventDefault();
     var formdata = new FormData(); //FormData object
-    var fileInputBase = document.getElementById('formFileBase');
-    if (fileInputBase.files.length != 1) {
-        alert("Indique un fichero base");
+    var file = document.getElementById('formFileMapa');
+    if (file.files.length != 1) {
+        alert("Indique un fichero");
         return;
     }
-    var fileInputCatastral = document.getElementById('formFileCatastral');
-    if (fileInputCatastral.files.length != 1) {
-        alert("Indique un fichero catastral");
-        return;
-    }
-    formdata.append(fileInputBase.files[0].name, fileInputBase.files[0]);
-    formdata.append(fileInputCatastral.files[0].name, fileInputCatastral.files[0]);
+    formdata.append(file.files[0].name, file.files[0]);
+
     var idVersion = document.getElementById('formIdVersion').value;
     if (idVersion == '') {
         alert("Indique versíón");
-        retur;
+        return;
     }
     formdata.append("idVersion", idVersion);
+    
+    var nivel = document.getElementById('formNivel').value;
+    if (nivel == '') {
+        alert("Indique nivel");
+        return;
+    }
+    formdata.append("nivel", nivel);
+
     //Creating an XMLHttpRequest and sending
     var xhr = new XMLHttpRequest();
     xhr.open('POST', urlPost);

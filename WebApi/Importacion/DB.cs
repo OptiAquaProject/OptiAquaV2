@@ -6,31 +6,14 @@
     public static partial class DB {
 
         internal static List<ItemMapaVersion> DatosMapasVersion() {
-            Database db = ConexionOptiaqua;
-
-            var ret = new List<ItemMapaVersion>();
-            var lBase=db.Fetch<ItemMapaVersion>("SELECT IdVersion , COUNT(ID) AS nRegBase FROM dbo.MapaBase GROUP BY IdVersion");
-            var lCatastral = db.Fetch<ItemMapaVersion>("SELECT IdVersion , COUNT(ID) AS nRegCatastral FROM dbo.MapaCatastral GROUP BY IdVersion");
-            foreach( var item in lBase ) {
-                var cat=lCatastral.FirstOrDefault(x=>x.IdVersion==item.IdVersion);
-                if( cat!=null ) {
-                    item.nRegCatastral=cat.nRegCatastral; 
-                }
-                ret.Add(item);
-            }
-            foreach (var item in lBase) {
-                var bas = lBase.FirstOrDefault(x => x.IdVersion == item.IdVersion);
-                if (bas == null) {                    
-                    ret.Add(item);
-                }
-            }
-            return ret;
+            Database db = ConexionOptiaqua;            
+            var lMapa=db.Fetch<ItemMapaVersion>("SELECT IdVersion, Nivel, COUNT(ID) AS NumRegistros FROM dbo.MapaSuelo GROUP BY IdVersion, Nivel");
+            return lMapa;
         }
 
-        public static void EliminarMapas(string idVersion) {
+        public static void EliminarMapas(string idVersion,int nivel) {
             Database db = ConexionOptiaqua;
-            db.Execute($"delete from MapaBase where IdVersion='{idVersion}'");
-            db.Execute($"delete from MapaCatastral where IdVersion='{idVersion}'");
+            db.Execute($"delete from MapaSuelo where IdVersion='{idVersion}' and Nivel={nivel}");            
         }
     }
 }

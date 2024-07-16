@@ -1360,15 +1360,6 @@
             <param name="idEstacion">idEstacion<see cref="!:int?"/>.</param>
             <returns><see cref="T:System.Collections.Generic.List`1"/>.</returns>
         </member>
-        <member name="M:DatosOptiaqua.DB.DatosClimaticosSiarList(System.DateTime,System.DateTime,System.Int32)">
-            <summary>
-            DatosClimaticosSiarList.
-            </summary>
-            <param name="desdeFecha">desdeFecha<see cref="T:System.DateTime"/>.</param>
-            <param name="hastaFecha">hastaFecha<see cref="T:System.DateTime"/>.</param>
-            <param name="idEstacion">idEstacion<see cref="T:System.Int32"/>.</param>
-            <returns><see cref="T:System.Collections.Generic.List`1"/>.</returns>
-        </member>
         <member name="M:DatosOptiaqua.DB.UnidadCultivoCultivoTemporadaSave(System.String,System.String,System.Int32,System.Int32,System.Int32,System.String)">
             <summary>
             UnidadCultivoCultivoTemporadaSave.
@@ -2565,6 +2556,15 @@
             </summary>
             <param name="parametro">The parametro<see cref="T:System.String"/></param>
             <param name="valor">The valor<see cref="T:System.Double"/></param>
+        </member>
+        <member name="M:Siar.DatosClimaticos.DatosClimaticosSiarList_V1(System.DateTime,System.DateTime,System.Int32)">
+            <summary>
+            DatosClimaticosSiarList.
+            </summary>
+            <param name="desdeFecha">desdeFecha<see cref="T:System.DateTime"/>.</param>
+            <param name="hastaFecha">hastaFecha<see cref="T:System.DateTime"/>.</param>
+            <param name="idEstacion">idEstacion<see cref="T:System.Int32"/>.</param>
+            <returns><see cref="T:System.Collections.Generic.List`1"/>.</returns>
         </member>
     </members>
 </doc>

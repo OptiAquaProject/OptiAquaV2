@@ -1,4 +1,5 @@
 ﻿namespace DatosOptiaqua {
+    using GeoAPI.Geometries;
     using Models;
     using Newtonsoft.Json;
     using NPoco;
@@ -9,6 +10,7 @@
     using System.Configuration;
     using System.Data.SqlTypes;
     using System.Globalization;
+    using System.IO;
     using System.Linq;
     using System.Net;
     using webapi;
@@ -24,7 +26,7 @@
     public static partial class DB {
 
         public static string PathRoot { get; set; }
-        public static int IdEstacionDefault = 503;
+        public static int IdEstacionDefault = 505;
 
         /// <summary>
         /// Gets the CadenaConexionOptiAqua.
@@ -1020,7 +1022,7 @@
                 dat.Poligonos = poligonos;
                 dat.RefCatastrales = refCatastrales;
                 dat.IdEstacion = EstacionDeUC(dat.IdUnidadCultivo, idTemporada);
-            }            
+            }
             ret.RemoveAll(x => x.IdTemporada == null);
             return ret;
         }
@@ -1614,14 +1616,14 @@
         /// </summary>
         /// <param name="idParcela">.</param>
         /// <returns>.</returns>
-        public static Parcela Parcela(int idParcela) {
+        public static ParcelaPoco Parcela(int idParcela) {
             Database db = null;
-            Parcela ret = null;
+            ParcelaPoco ret = null;
             try {
                 db = DB.ConexionOptiaqua;
                 string sql = "SELECT IdParcelaInt, IdGadmin, IdRegante, IdProvincia, IdMunicipio, IdPoligono, IdParcela, IdParaje, Descripcion, Longitud, Latitud, XUTM, YUTM, Huso, Altitud, RefCatastral, GID, SuperficieM2 FROM dbo.Parcela";
                 sql += " where idParcelaInt=" + idParcela.ToString();
-                ret = db.Single<Parcela>(sql);
+                ret = db.Single<ParcelaPoco>(sql);
             } catch (Exception ex) {
                 throw new Exception("No se pudo cargar parcela:" + idParcela.ToString() + " -" + ex.Message);
             }
@@ -1672,98 +1674,8 @@
             return db.SingleOrDefault<UnidadCultivoCultivo>(sql);
         }
 
-        public static List<DatosSuelo> ParcelaSueloList(string idUC, string idTemporada) {
-
-            var lDatosExtra = UnidadCultivoDatosExtraSuelo(idUC, idTemporada);
-            if (lDatosExtra!=null && lDatosExtra.Count>0)
-                return lDatosExtra; 
-
-            var lComunidadRegantes = DatosSueloComunidadRegantes(idUC, idTemporada);
-            // si tenemos datos de la unidad de cultivo 
-            if (lComunidadRegantes != null && lComunidadRegantes.Count > 0)
-                return lComunidadRegantes;
-
-            var db = DB.ConexionOptiaqua;
-            var lDatosSueloParcelas = new List<DatosSuelo>();
-            var idVersionMapa = db.Single<string>($"select IdVersionMapa from Temporada where idTemporada='{idTemporada}'");
-            if (idVersionMapa != null) {
-                var sqlParcelas = $"select * from ParcelasDeUC where IdTemporada='{idTemporada}' and IdUnidadCultivo='{idUC}'";
-                var lParcelas = db.Fetch<Parcela>(sqlParcelas);
-                foreach (var parcela in lParcelas) {
-                    var dsCatastral = DatosSueloMapasCatastrales(idVersionMapa, parcela, out double lat, out double lng);
-                    if (dsCatastral != null) {
-                        lDatosSueloParcelas.Add(dsCatastral);
-                        if (parcela.Latitud == null || parcela.Longitud == null) {
-                            parcela.Latitud = lat;
-                            parcela.Longitud = lng;
-                        }
-                    }
-                    var dsBase = DatosSueloMapasBase(idVersionMapa, parcela);
-                    if (dsBase != null) {
-                        var ds1 = dsBase[0];
-                        if (dsCatastral == null || ds1.ProfundidadCM > dsCatastral.ProfundidadCM) {
-                            lDatosSueloParcelas.Add(ds1);
-                        }
-                        if (dsBase.Count > 1) {
-                            var ds2 = dsBase[1];
-                            if (dsCatastral == null || ds2.ProfundidadCM > dsCatastral.ProfundidadCM) {
-                                lDatosSueloParcelas.Add(ds2);
-                            }
-                        }
-                    }
-                }
-            }
-            if (lDatosSueloParcelas.Count == 0)
-                throw new Exception($"No se encontraron datos de suelo para la unidad de cultivo: '{idUC}' en la temporada: '{idTemporada}'");
-            double totalSuperficie = 0;
-            foreach (var parcela in lDatosSueloParcelas) {
-                parcela.Superficie = db.SingleOrDefault<double>($"select SuperficieM2 from Parcela where idParcelaInt={parcela.IdParcelaInt}");
-                totalSuperficie += parcela.Superficie;
-            }
-            var porParcela = lDatosSueloParcelas.GroupBy(x => x.IdParcelaInt).Select(x => new { x.Key, list = x.ToList() }).ToList();
-            // EN ldsBase ahora tenemos datos del suelo para todas las parcelas. Si lo datos se han tomado de MapaBese con dos horizontes, sino con un solo horizonte.
-            // Ahora lo tenemos que fusionar en lista única.
-            var ret = new List<DatosSuelo>();
-            double hAnt = 0;
-            if (porParcela.Count == 0)
-                return ret;
-
-            var hEstudio = lDatosSueloParcelas.Where(x => x.ProfundidadCM > hAnt).Min(x => x.ProfundidadCM);
-            while (hEstudio > 0) {
-                double arena_dividendo = 0, limo_dividendo = 0, arcilla_dividendo = 0, eg_dividendo = 0, mo_dividendo = 0;
-                foreach (var par in porParcela) {
-                    var ds = par.list.FirstOrDefault(x => x.ProfundidadCM <= hEstudio);
-                    if (ds != null) {
-                        arena_dividendo += ds.Arena * ds.Superficie;
-                        limo_dividendo += ds.Limo * ds.Superficie;
-                        arcilla_dividendo += ds.Arcilla * ds.Superficie;
-                        eg_dividendo += ds.ElementosGruesos * ds.Superficie;
-                        mo_dividendo += ds.MateriaOrganica * ds.Superficie;
-                    }
-                }
-                var reg = new DatosSuelo {
-                    ProfundidadCM = hEstudio,
-                    Superficie = totalSuperficie,
-                    Arena = arena_dividendo / totalSuperficie,
-                    Limo = limo_dividendo / totalSuperficie,
-                    Arcilla = arcilla_dividendo / totalSuperficie,
-                    ElementosGruesos = eg_dividendo / totalSuperficie,
-                    MateriaOrganica = mo_dividendo / totalSuperficie,
-                    IdParcelaInt = -1
-                };
-                ret.Add(reg);
-                hAnt = hEstudio;
-                var lSigH = lDatosSueloParcelas.Where(x => x.ProfundidadCM > hAnt);
-                if (lSigH.Any())
-                    hEstudio = lSigH.Min(x => x.ProfundidadCM);
-                else
-                    hEstudio = 0;
-            }
-            return ret;
-        }
-
         public static List<DatosSuelo> UnidadCultivoDatosExtraSuelo(string idUC, string idTemporada) {
-            var ret = DB.ConexionOptiaqua.Fetch<DatosSuelo>("select * from UnidadCultivoDatosExtraSuelo where IdUnidadCultivo=@0 and IdTemporada=@1",idUC,idTemporada);
+            var ret = DB.ConexionOptiaqua.Fetch<DatosSuelo>("select * from UnidadCultivoDatosExtraSuelo where IdUnidadCultivo=@0 and IdTemporada=@1", idUC, idTemporada);
             return ret;
         }
 
@@ -1809,7 +1721,8 @@
                     Arcilla = arcilla_dividendo / totalSuperficie,
                     ElementosGruesos = eg_dividendo / totalSuperficie,
                     MateriaOrganica = mo_dividendo / totalSuperficie,
-                    IdParcelaInt = -1
+                    IdParcelaInt = -1,
+                    //IdVersion="-datos-extra"                    
                 };
                 ret.Add(reg);
                 hAnt = hEstudio;
@@ -1822,105 +1735,195 @@
             return ret;
         }
 
-        public static List<DatosSuelo> DatosSueloMapasBase(string idVersionMapa, Parcela parcela) {
+
+        public static List<DatosSuelo> DatosSueloBaseNew(string idVersionMapa, int idParcelaInt, double? lat, double? lng, string refCatastral) {
             Database db = DB.ConexionOptiaqua;
-            var ret = new List<DatosSuelo>();
-            var lBase = new List<MapaBaseSqlserverPoco>();
 
+            if (lat == 0 || lng == 0 || lat == null || lng == null) {
+                InsertaEvento($"La Parcela {idParcelaInt} no tiene valores Lat-Lng");
+                return null;
+            }
 
-            var lat = parcela.Latitud.ToString().Replace(",", ".");
-            var lng = parcela.Longitud.ToString().Replace(",", ".");
-            if (string.IsNullOrWhiteSpace(lat) || string.IsNullOrWhiteSpace(lng))
-                throw new Exception($"La pacela '{parcela.IdParcelaInt}' no tiene valores latitud y longitud válidos");
+            var latStr = lat.Value.ToString().Replace(",", ".");
+            var lngStr = lng.Value.ToString().Replace(",", ".");
+
             var sqlBase = @"
-                    SELECT IdVersion, ID, ID_INTER_PROSP_RELIEVE, Litologia, Cuenca, Proy_GEODE, COORD_X, COORD_Y, CLASIFICAC, HS_PROF_cm, HS_ARENA_Porc, HS_ARCILLA_Porc, HS_LIMO_Porc, HS_TEXTURA, HS_EGRUESO_Porc, 
-                         HS_CALIZAA_g_Kg, HS_CARBONA_g_Kg, HS_CE_dS_m, HS_MATORG_Porc, HS_PH, HS_CIC_meq100g, SC_ESPESOR_cm, SC_ARENA_Porc, SC_ARCILLA_Porc, SC_LIMO_Porc, SC_TEXTURA, SC_EGRUESO_Porc, 
-                         SC_CALIZAA_g_Kg, SC_CARBONA_g_Kg, SC_CE_dS_m, SC_MATORG_Porc, SC_PH, SC_CIC_meq_100g, PROF_EFECTIVA_cm, GEOFORMA, SUELO1, SUELO2, SUELO3
-                    FROM dbo.MapaBase
+                    SELECT  Nivel, IdVersion,ID, IdMapaSuelo,
+                            HS_ESPESOR_cm, HS_ARENA_Porc, HS_ARCILLA_Porc, HS_LIMO_Porc, HS_EGRUESO_Porc,  HS_MATORG_Porc, HS_TEXTURA,
+                            SC_ESPESOR_cm, SC_ARENA_Porc, SC_ARCILLA_Porc, SC_LIMO_Porc, SC_EGRUESO_Porc, SC_MATORG_Porc, PROF_EFECTIVA_cm 
+                    FROM dbo.MapaSuelo
                  ";
-            sqlBase += $" where geom.STContains( geometry::STGeomFromText('POINT({lng}  {lat})', 4326)) =1";
-            var rBase = db.SingleOrDefault<MapaBaseSqlserverPoco>(sqlBase);
-            if (rBase == null)
-                return null;
-            // ignorar si tiene valores null
-            if (rBase.HS_ARCILLA_Porc == null && rBase.HS_LIMO_Porc == null && rBase.HS_ARENA_Porc == null && rBase.HS_EGRUESO_Porc == null && rBase.HS_MATORG_Porc == null)
-                return null;
+            sqlBase += $" where IdVersion='{idVersionMapa}' and  geom.STContains( geometry::STGeomFromText('POINT({lngStr}  {latStr})', 4326)) =1 order by Nivel desc";
+            var lSuelosDB = db.Fetch<MapaSueloPoco>(sqlBase);
+            var lDS = new List<DatosSueloDB>();
+            foreach (var s in lSuelosDB) {
+                var dsHS = new DatosSueloDB {
+                    IdParcelaInt = idParcelaInt,
+                    Arcilla = s.HS_ARCILLA_Porc / 100.0,
+                    Arena = s.HS_ARENA_Porc / 100.0,
+                    Limo = s.HS_LIMO_Porc / 100.0,
+                    MateriaOrganica = s.HS_MATORG_Porc/100.0,
+                    ElementosGruesos = s.HS_EGRUESO_Porc / 100.0,
+                    ProfundidadCMInicial = 0,
+                    ProfundidadCMFinal = s.HS_ESPESOR_cm,
+                    Nivel = s.Nivel ,
+                    EsHorizonteControl = false,
+                };
+                var dsSC = new DatosSueloDB {
+                    IdParcelaInt = idParcelaInt,
+                    Arcilla = s.SC_ARCILLA_Porc / 100.0,
+                    Arena = s.SC_ARENA_Porc / 100.0 ,
+                    Limo = s.SC_LIMO_Porc / 100.0,
+                    MateriaOrganica = s.SC_MATORG_Porc / 100.0,
+                    ElementosGruesos = s.SC_EGRUESO_Porc / 100.0,
+                    ProfundidadCMInicial = s.HS_ESPESOR_cm,
+                    ProfundidadCMFinal = s.PROF_EFECTIVA_cm,
+                    Nivel = s.Nivel,
+                    EsHorizonteControl = true,
+                };
+                if (dsHS.ProfundidadCMFinal!=null) // si no tenemos un valor de profundidad no vale para nada 
+                    lDS.Add(dsHS);
+                if (dsSC.ProfundidadCMFinal!=null)// si no tenemos un valor de profundidad no vale para nada 
+                    lDS.Add(dsSC);
+            }
 
-            var ds1 = new DatosSuelo {
-                IdParcelaInt = parcela.IdParcelaInt,
-                ProfundidadCM = rBase.HS_PROF_cm ?? 0,
-                Arcilla = rBase.HS_ARCILLA_Porc.Value/100.0,
-                Arena = rBase.HS_ARENA_Porc.Value/100.0,
-                Limo = rBase.HS_LIMO_Porc.Value / 100.0,
-                ElementosGruesos = rBase.HS_EGRUESO_Porc.Value / 100.0,
-                MateriaOrganica = rBase.HS_MATORG_Porc.Value / 100.0
-            };
-            ret.Add(ds1);
+            var lH = CalculaHorizontes(lDS).Distinct().OrderBy(x=>x).ToList();
+            var lRet = new List<DatosSuelo>();
+            foreach (var h in lH) {
+                var datosTextura = DatosTexturaEnHorizonte(lDS, h);
+                var eg= DatosElemtosGrusosEnHorizonte(lDS, h);
+                var mo=DatosMateriaOrganicaEnHorizonte(lDS,h);  
+                var ds = new DatosSuelo {
+                    Arcilla = datosTextura.Arcilla.Value,
+                    Arena = datosTextura.Arena.Value,
+                    Limo = datosTextura.Limo.Value,
+                    IdParcelaInt = datosTextura.IdParcelaInt,
+                    ElementosGruesos = eg.Value,
+                    MateriaOrganica = mo.Value,
+                    Nivel = datosTextura.Nivel,
+                    ProfundidadCM = h
+                };
+                lRet.Add(ds);
+            }
+            if (lRet.Count == 0)
+                lRet = new List<DatosSuelo>();
+            return lRet;
+        }
 
-            var ds2 = new DatosSuelo {
-                IdParcelaInt = parcela.IdParcelaInt,
-                ProfundidadCM = rBase.PROF_EFECTIVA_cm ?? 0,
-                Arcilla = rBase.SC_ARCILLA_Porc.Value / 100.0,
-                Arena = rBase.SC_ARENA_Porc.Value / 100.0,
-                Limo = rBase.SC_LIMO_Porc.Value / 100.0,
-                ElementosGruesos = rBase.SC_EGRUESO_Porc.Value / 100.0,
-                MateriaOrganica = rBase.SC_MATORG_Porc.Value / 100.0
-            };
-            if (ds2.ProfundidadCM >= ds1.ProfundidadCM)// solo si aporta información se suma
-                ret.Add(ds2);
-
+        private static DatosSueloDB DatosTexturaEnHorizonte(List<DatosSueloDB> lDS, double h) {
+            var lCubren = lDS
+                .Where(s =>
+                    s.ProfundidadCMInicial < h  && s.ProfundidadCMFinal >= h
+                    && s.MateriaOrganica != null                      
+                    && s.Limo != null 
+                    && s.Arcilla != null 
+                    && s.Arena != null)
+                .ToList();
+            var listsPreferencia = lCubren.OrderByDescending(x=>x.Nivel).ToList();
+            var ret=listsPreferencia.FirstOrDefault();
+            return ret;
+        }
+       
+        private static double? DatosElemtosGrusosEnHorizonte(List<DatosSueloDB> lDS, double h) {
+            var lCubren = lDS
+                .Where(s =>
+                    s.ProfundidadCMInicial < h && s.ProfundidadCMFinal >= h
+                    && s.ElementosGruesos!= null)
+                .ToList();
+            var listsPreferencia = lCubren.OrderByDescending(x => x.Nivel).ToList();
+            var ret = listsPreferencia.FirstOrDefault()?.ElementosGruesos;
             return ret;
         }
 
-        public static DatosSuelo DatosSueloMapasCatastrales(string idVersionMapa, Parcela parcela, out double lat, out double lng) {
-            Database db = DB.ConexionOptiaqua;
+        private static double? DatosMateriaOrganicaEnHorizonte(List<DatosSueloDB> lDS, double h) {
+            var lCubren = lDS
+                .Where(s =>
+                    s.ProfundidadCMInicial < h && s.ProfundidadCMFinal >= h
+                    && s.MateriaOrganica != null)
+                .ToList();
+            var listsPreferencia = lCubren.OrderByDescending(x => x.Nivel).ToList();
+            var ret = listsPreferencia.FirstOrDefault()?.MateriaOrganica;
+            return ret;
+        }
 
-            var sqlCatastral = @"SELECT        IdVersion, ID, ID_MUESTRA, ORIGEN_MUESTRA, FECHA_MUESTRA, PROVINCIA, MUNICIPIO, POLIGONO, PARCELA,
-                                   REF_CATAST, Latitud, Longitud, HS_PROF_cm, HS_ARENA_Porc, HS_ARCILLA_Porc, HS_LIMO_Porc, HS_TEXTURA, HS_EGRUESO_Porc, 
-                                    HS_MATORG_Porc, HS_PH, PROF_EFECTIVA_cm, OBSERVACIONES FROM dbo.MapaCatastral ";
-            sqlCatastral += $"where Provincia={parcela.IdProvincia} and  Municipio={parcela.IdMunicipio} and Poligono={parcela.IdPoligono} and Parcela = {parcela.IdParcela} and IdVersion='{idVersionMapa}' ";
-            var catastral = db.SingleOrDefault<MapaCatastralSqlserverPoco>(sqlCatastral);
-            lat = 0;
-            lng = 0;
-            // ignorar si tiene valores null
-            if (catastral == null)
-                return null;
-            if (catastral.HS_ARCILLA_Porc == null && catastral.HS_LIMO_Porc == null && catastral.HS_ARENA_Porc == null && catastral.HS_EGRUESO_Porc == null && catastral.HS_MATORG_Porc == null)
-                return null;
-                //throw new Exception($"Los datos en el mapa catastral '{idVersionMapa}' para la parcela '{parcela.IdParcelaInt}' no so válidos");
-            lat = catastral.Latitud ?? 0;
-            lng = catastral.Longitud ?? 0;
-            double profSuperf = catastral.HS_PROF_cm ?? 0;
-            if (catastral.PROF_EFECTIVA_cm != null && catastral.PROF_EFECTIVA_cm < profSuperf) {
-                profSuperf = catastral.PROF_EFECTIVA_cm.Value;
-            }
 
-            var ds = new DatosSuelo {
-                IdParcelaInt = parcela.IdParcelaInt,
-                ProfundidadCM = profSuperf,
-                Arcilla = catastral.HS_ARCILLA_Porc/100.0 ?? 0,
-                Arena = catastral.HS_ARENA_Porc / 100.0 ?? 0,
-                Limo = catastral.HS_LIMO_Porc / 100.0 ?? 0,
-                ElementosGruesos = catastral.HS_EGRUESO_Porc / 100.0 ?? 0,
-                MateriaOrganica = catastral.HS_MATORG_Porc / 100.0 ?? 0
+        private static List<double> CalculaHorizontes(List<DatosSueloDB> lDS) {
+            var ret = new List<double>();            
+            bool yaTenemospMax = false;
+            foreach (var ds in lDS) {
+                var lResto = lDS
+                    .Where(x => x.Nivel < ds.Nivel)
+                    .OrderByDescending(x => x.Nivel)
+                    .ToList();
+                var p = ds.ProfundidadCMFinal.Value;
+                foreach (var r in lResto) {                    
+                    var minP = Math.Min(r.ProfundidadCMFinal.Value, p);                    
+                    if (ds.Arena == null && r.Arena != null) {
+                        p = minP;
+                        }
+                    if (ds.Arcilla == null && r.Arcilla != null) {
+                        p = minP;
+                    }
+                    if (ds.Limo == null && r.Limo != null) {
+                        p = minP;
+                    }
+                    if (ds.MateriaOrganica == null && r.MateriaOrganica != null) {
+                        p = minP;
+                    }
+                    if (ds.ElementosGruesos == null) {
+                        p = minP;
+                    }
+                }
+                if (ds.EsHorizonteControl == false || (ds.EsHorizonteControl == true && yaTenemospMax == false)) {
+                    ret.Add(p);// añadir horizonte 
+                    if (ds.EsHorizonteControl == true && yaTenemospMax == false)
+                        yaTenemospMax = true;
+                }
+            }        
+            return ret;
+        }
+
+        public static MapaSueloPoco Clone(MapaSueloPoco item) {
+            var newPoco = new MapaSueloPoco {
+                HS_ARCILLA_Porc = item.HS_ARCILLA_Porc,
+                HS_ESPESOR_cm = item.HS_ESPESOR_cm,
+                HS_ARENA_Porc = item.HS_ARENA_Porc,
+                Geom = item.Geom,
+                HS_EGRUESO_Porc = item.HS_EGRUESO_Porc,
+                HS_LIMO_Porc = item.HS_LIMO_Porc,
+                HS_MATORG_Porc = item.HS_MATORG_Porc,
+                HS_TEXTURA = item.HS_TEXTURA,
+                ID = item.ID,
+                IdMapaSuelo = item.IdMapaSuelo,
+                IdVersion = item.IdVersion,
+                Nivel = item.Nivel,
+                OBSERVACIONES = item.OBSERVACIONES,
+                PROF_EFECTIVA_cm = item.PROF_EFECTIVA_cm,
+                REF_CATAST = item.REF_CATAST,
+                SC_ARCILLA_Porc = item.SC_ARCILLA_Porc,
+                SC_ARENA_Porc = item.SC_ARENA_Porc,
+                SC_EGRUESO_Porc = item.SC_EGRUESO_Porc,
+                SC_ESPESOR_cm = item.SC_ESPESOR_cm,
+                SC_LIMO_Porc = item.SC_LIMO_Porc,
+                SC_MATORG_Porc = item.SC_MATORG_Porc
             };
-            return ds;
+            return newPoco;
         }
 
-        public static void MapasCatastralesDatosLngLat(Parcela parcela, out double lat, out double lng) {
-            Database db = DB.ConexionOptiaqua;
-
-            var sqlCatastral = @"SELECT Latitud, Longitud FROM dbo.MapaCatastral ";
-            sqlCatastral += $"where Provincia={parcela.IdProvincia} and  Municipio={parcela.IdMunicipio} and Poligono={parcela.IdPoligono} and Parcela = {parcela.IdParcela} ";
-            var catastral = db.FirstOrDefault<MapaCatastralSqlserverPoco>(sqlCatastral);
-            lat = 0;
-            lng = 0;
-            if (catastral == null)
-                return;
-            lat = catastral.Latitud ?? 0;
-            lng = catastral.Longitud ?? 0;
+        static public List<DatosSuelo> ValoresDeSueloPorDefectoLaRioja(int idParcelaInt) {
+            var ret = new List<DatosSuelo>();
+            var dsLaRioja = new DatosSuelo {
+                IdParcelaInt = idParcelaInt,
+                ProfundidadCM = 100,
+                Arcilla = 33.3 / 100.0,
+                Arena = 55.0 / 100.0,
+                Limo = 24.65 / 100.0,
+                ElementosGruesos = 15.0 / 100.0,
+                MateriaOrganica = 1.2 / 100.0
+            };
+            ret.Add(dsLaRioja);
+            return ret;
         }
-
 
         /// <summary>
         /// Actualiza los datos climáticos almacenados.
@@ -1940,7 +1943,8 @@
                 DateTime hastaFecha = DateTime.Today;
 
                 foreach (var idEstacion in lEstaciones) {
-                    List<DatoClimatico> datClima = DatosClimaticosSiarList(desdeFecha, hastaFecha, idEstacion);
+                    //hastaFecha = new DateTime(2024, 2, 28);
+                    List<DatoClimatico> datClima = Siar.DatosClimaticos.DatosClimaticosSiarList_V2(desdeFecha, hastaFecha, idEstacion);
                     DB.DatosClimaticosSave(datClima);
                     if (nDiasAtras + 1 != datClima.Count && datClima.Max(x => x.Fecha) != DateTime.Today) {
                         emailNotificacionErrorDatosClimaticos = DB.ConfigLoad("EmailNotificacionErrorDatosClimaticos");
@@ -2019,48 +2023,7 @@
             return db.Fetch<DatoClimatico>(sql, desdeFecha, hastaFecha, idEstacion);
         }
 
-        /// <summary>
-        /// DatosClimaticosSiarList.
-        /// </summary>
-        /// <param name="desdeFecha">desdeFecha<see cref="DateTime"/>.</param>
-        /// <param name="hastaFecha">hastaFecha<see cref="DateTime"/>.</param>
-        /// <param name="idEstacion">idEstacion<see cref="int"/>.</param>
-        /// <returns><see cref="List{DatoClimatico}"/>.</returns>
-        public static List<DatoClimatico> DatosClimaticosSiarList(DateTime desdeFecha, DateTime hastaFecha, int idEstacion) {
-            try {
-                string sURL;
-                //sURL Ejemplo = "http://apisiar.larioja.org/v1/datos-calculo-riego?estacion=501&fechaInicio=2017-08-07&fechaFin=2017-08-10";
-                sURL = "http://apisiar.larioja.org/v1/datos-calculo-riego?";
-                sURL += "estacion=" + idEstacion.ToString();
-                sURL += "&fechaInicio=" + desdeFecha.ToString("yyyy-MM-dd");
-                sURL += "&fechaFin=" + hastaFecha.ToString("yyyy-MM-dd");
-                WebClient wc = new System.Net.WebClient();
-                string json = wc.DownloadString(sURL);
-                RootApiSiar dataSiar = Newtonsoft.Json.JsonConvert.DeserializeObject<RootApiSiar>(json);
-                List<DatoClimatico> lista = new List<DatoClimatico>();
-                if (dataSiar?.data == null)
-                    return lista;
-                foreach (DatoClimaticoApiSiar dat in dataSiar.data) {
-                    DatoClimatico dc = new DatoClimatico {
-                        IdEstacion = int.Parse(dat.Estacion),
-                        Fecha = Convert.ToDateTime(dat.Fecha),
-                        Eto = dat.ET0 == "NA" ? 0 : double.Parse(dat.ET0, CultureInfo.InvariantCulture),
-                        TempMedia = dat.TAirMd == "NA" ? 0 : double.Parse(dat.TAirMd, CultureInfo.InvariantCulture),
-                        HumedadMedia = dat.HRMn == "NA" ? 0 : double.Parse(dat.HRMn, CultureInfo.InvariantCulture),
-                        VelViento = dat.VWindMd == "NA" ? 0 : double.Parse(dat.VWindMd, CultureInfo.InvariantCulture),
-                        Precipitacion = dat.PAcum == "NA" ? 0 : double.Parse(dat.PAcum, CultureInfo.InvariantCulture)
-                    };
-                    lista.Add(dc);
-                }
-                return lista;
-            } catch {
-                string msgErr = "Error cargando datos climáticos para parametros.\n";
-                msgErr += "Desde Fecha: " + desdeFecha.ToShortDateString() + "\n";
-                msgErr += "Hasta Fecha: " + hastaFecha.ToShortDateString() + "\n";
-                msgErr += "Estación: " + idEstacion.ToString() + "\n";
-                throw new Exception(msgErr);
-            }
-        }
+        
 
         public static void ParcelaSueloSave(int idParcelaInt, int idHorizonte, double limo, double arcilla, double arena, double matOrg, double eleGru, double prof) {
             try {
@@ -2358,7 +2321,7 @@
             Database db = DB.ConexionOptiaqua;
             string sql = "Select SuperficieM2 From UnidadCultivoCultivo Where IdUnidadCultivo=@0 and IdTemporada=@1";
             ret = db.SingleOrDefault<float?>(sql, idUnidadCultivo, idTemporada);
-            if (ret != null && (double)ret!=0)
+            if (ret != null && (double)ret != 0)
                 return (double)ret;
             sql = " SELECT TOP(1) SuperficieM2 FROM UnidadCultivoCultivo WHERE(IdTemporada = @0) ORDER BY IdTemporada DESC";
             ret = db.SingleOrDefault<float?>(sql, idUnidadCultivo);
@@ -2371,7 +2334,7 @@
             sql += " GROUP BY dbo.UnidadCultivoParcela.IdUnidadCultivo, dbo.UnidadCultivoParcela.IdTemporada ";
             sql += " HAVING(dbo.UnidadCultivoParcela.IdUnidadCultivo =@0) AND(dbo.UnidadCultivoParcela.IdTemporada =@1)";
             ret = db.SingleOrDefault<double?>(sql, idUnidadCultivo, idTemporada);
-            if (ret!=null && ret != 0) {
+            if (ret != null && ret != 0) {
                 db.Execute($"update UnidadCultivoCultivo set SuperficieM2={ret} where IdUnidadCultivo='{idUnidadCultivo}' and IdTemporada='{idTemporada}'");
             }
 
@@ -2484,11 +2447,10 @@
                 return ret;
             }
         }
-
-        // toma los datos GIS de ZonasInfluenciaEMAsRegGeneral y actualiza el IdEstación de las Parcelas.
+        /*
         public static void ActulizaEstacionParcelas() {
             using (var db = DB.ConexionOptiaqua) {
-                var lPar = db.Fetch<Parcela>();
+                var lPar = db.Fetch<ParcelaPoco>();
                 foreach (var par in lPar) {
                     int idEstacion = IdEstacionDefault;
                     double lng = 0, lat = 0;
@@ -2499,8 +2461,6 @@
                         var latStr = par.Latitud.ToString().Replace(',', '.');
                         var sql = $" select codigoEMA from ZonasInfluenciaEMAsRegGeneral where geom.STContains( geometry::STGeomFromText('POINT({lngStr}  {latStr})', 4326)) =1";
                         idEstacion = db.SingleOrDefault<int>(sql);
-                        if (idEstacion != 503)
-                            idEstacion = idEstacion;
                         if (idEstacion == 0)
                             idEstacion = IdEstacionDefault;
                     }
@@ -2509,10 +2469,11 @@
 
             }
         }
+        */
 
         internal static int EstacionDeParcela(int idParcelaInt) {
             using (var db = DB.ConexionOptiaqua) {
-                var par = db.SingleOrDefaultById<Parcela>(idParcelaInt);
+                var par = db.SingleOrDefaultById<ParcelaPoco>(idParcelaInt);
                 if (par != null) {
                     return par.IdEstacion ?? IdEstacionDefault;
                 }
@@ -2525,7 +2486,7 @@
             using (var db = DB.ConexionOptiaqua) {
                 var lPar = DB.ParcelasDeUnidadCultivo(idUC, idTemporada);
                 if (lPar.Count > 0) {
-                    var par = db.SingleOrDefaultById<Parcela>(lPar[0]);
+                    var par = db.SingleOrDefaultById<ParcelaPoco>(lPar[0]);
                     return par.IdEstacion ?? IdEstacionDefault;
                 }
                 return IdEstacionDefault;
@@ -2535,7 +2496,7 @@
 
         internal static bool ParcelaExits(int idPar) {
             using (var db = DB.ConexionOptiaqua) {
-                return db.Exists<Parcela>(idPar);
+                return db.Exists<ParcelaPoco>(idPar);
             }
         }
 
@@ -2543,6 +2504,10 @@
             using (var db = DB.ConexionOptiaqua) {
                 return db.Single<double?>($"select SuperficieM2 from Parcela where IdParcelaInt={idPar}");
             }
+        }
+
+        internal static double ParcelaSuperficieM2(int idPar, Database db) {
+            return db.Single<double?>($"select SuperficieM2 from Parcela where IdParcelaInt={idPar}") ?? 0;
         }
 
         internal static bool CultivoExists(int idCultivo) {
@@ -2556,5 +2521,152 @@
                 return db.Exists<Regante>(idRegante);
             }
         }
+
+        internal static string EstacionNombre(int idEstacion) {
+            if (idEstacion <= 0)
+                idEstacion = IdEstacionDefault;
+            using (var db = DB.ConexionOptiaqua) {
+                var nombre = db.Single<string>($"select Nombre from Estacion where IdEstacion={idEstacion}");
+                return nombre;
+            }
+
+        }
+
+        public static void ActulizaDatosGeoParcelas() {
+            var db = DB.ConexionOptiaqua;
+            var sql = "SELECT *  FROM [OptiAquaV2].[dbo].[Parcela]  where Longitud is null or latitud is null or geo is null";
+            var lPSin = db.Fetch<ParcelaPoco>(sql);
+            foreach (var p in lPSin) {
+                var pSigpac = SigPacGetRecInfo(p.IdProvincia.Value, p.IdMunicipio.Value, p.IdPoligono.Value, int.Parse(p.IdParcela), 1);
+                if (pSigpac == null)
+                    continue;
+                var sqlUpdate = $"update Parcela set geo = geometry::STGeomFromText('{pSigpac.wkt}',4258) where IdParcelaInt={p.IdParcelaInt}";
+                var kk = db.Execute(sqlUpdate);
+                sqlUpdate = $"update Parcela set latitud =geo.STCentroid().STY , longitud= geo.STCentroid().STX  where IdParcelaInt={p.IdParcelaInt}";
+                kk = db.Execute(sqlUpdate);
+            }
+        }
+
+        public static SigPacDBPoco SigPacGetRecInfo(int pro, int mun, int pol, int par, int rec) {
+            var url = $"https://sigpac.mapama.gob.es/fega/ServiciosVisorSigpac/query/recinfo/{pro}/{mun}/0/0/{pol}/{par}/{rec}.json/";
+            var request = (HttpWebRequest)WebRequest.Create(url);
+            request.Method = "GET";
+            request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+            //request.ContentType = "application/json";
+            //request.Accept = "application/json";
+            try {
+
+                using (WebResponse response = request.GetResponse()) {
+                    using (Stream strReader = response.GetResponseStream()) {
+                        if (strReader == null) return null;
+                        using (StreamReader objReader = new StreamReader(strReader)) {
+                            string responseBody = objReader.ReadToEnd();
+                            // Do something with responseBody
+                            // Console.WriteLine(responseBody);
+                            var lret = Newtonsoft.Json.JsonConvert.DeserializeObject<SigPacDBPoco[]>(responseBody);
+                            if (lret.Length == 0)
+                                return null;
+                            var ret = lret[0];
+                            //var geo1 = ret.wkt.Replace("POLYGON", "").Replace("(", "").Replace(")", "");
+                            //var lPares = geo1.Split(',');
+                            //StringBuilder compose = new StringBuilder();
+                            //foreach(var p in lPares) {
+                            //    var geo2 = p.Split(' ');
+                            //    compose= compose.Append("["+geo2[0] +"," + geo2[1]+"],");
+                            //}
+                            //compose.Remove(compose.Length-1, 1);
+                            //ret.wkt= "[["+ compose.ToString() +"]]";    
+                            return ret;
+                        }
+                    }
+                }
+            } catch (WebException ex) {
+                return null;
+                // Handle error
+            }
+        }
+
+        public static List<DatosSuelo> UnidadCultivoSueloListNew(string idUC, string idTemporada) {
+
+            var lDatosExtra = UnidadCultivoDatosExtraSuelo(idUC, idTemporada);
+            if (lDatosExtra != null && lDatosExtra.Count > 0)
+                return lDatosExtra;
+
+            var lComunidadRegantes = DatosSueloComunidadRegantes(idUC, idTemporada);
+            // si tenemos datos de la unidad de cultivo 
+            if (lComunidadRegantes != null && lComunidadRegantes.Count > 0)
+                return lComunidadRegantes;
+
+            var db = DB.ConexionOptiaqua;
+            var lDatosSueloParcelas = new List<DatosSuelo>();
+            var idVersionMapa = db.Single<string>($"select IdVersionMapa from Temporada where idTemporada='{idTemporada}'");
+            if (idVersionMapa != null) {
+                var sqlParcelas = $"select * from ParcelasDeUC where IdTemporada='{idTemporada}' and IdUnidadCultivo='{idUC}'";
+                var lParcelas = db.Fetch<ParcelaPoco>(sqlParcelas);
+                foreach (var parcela in lParcelas) {
+                    var lDsBase = DatosSueloBaseNew(idVersionMapa, parcela.IdParcelaInt, parcela.Latitud, parcela.Longitud, parcela.RefCatastral);
+                    if (lDsBase != null) {
+                        lDatosSueloParcelas.AddRange(lDsBase);
+                    }
+                }
+            }
+            if (lDatosSueloParcelas.Count == 0)
+                throw new Exception($"No se encontraron datos de suelo para la unidad de cultivo: '{idUC}' en la temporada: '{idTemporada}'");
+
+
+            var porParcela = lDatosSueloParcelas.
+                GroupBy(x => new { x.IdParcelaInt, superficie = ParcelaSuperficieM2(x.IdParcelaInt, db) }).
+                Select(x => new { x.Key, list = x.ToList() }).ToList();
+            double totalSuperficie = porParcela.Sum(x => x.Key.superficie);
+
+            // EN ldsBase ahora tenemos datos del suelo para todas las parcelas.
+            // Ahora lo tenemos que fusionar en lista única.
+            var ret = new List<DatosSuelo>();
+            double hAnt = 0;
+            if (porParcela.Count == 0)
+                throw new Exception($"No se encontraron datos de suelo para la unidad de cultivo: '{idUC}' en la temporada: '{idTemporada}'");
+
+            var hEstudio = lDatosSueloParcelas.Where(x => x.ProfundidadCM > hAnt).Min(x => x.ProfundidadCM);
+            while (hEstudio > 0) {
+                double arena_dividendo = 0, limo_dividendo = 0, arcilla_dividendo = 0, eg_dividendo = 0, mo_dividendo = 0;
+                double totalSuperfieConDatosEnHorizonte = 0;
+                foreach (var par in porParcela) {
+                    var ds = par.list.Where(x => x.ProfundidadCM >= hEstudio).OrderBy(x => x.ProfundidadCM).FirstOrDefault();
+                    if (ds != null) {
+                        arena_dividendo += ds.Arena * par.Key.superficie;
+                        limo_dividendo += ds.Limo * par.Key.superficie;
+                        arcilla_dividendo += ds.Arcilla * par.Key.superficie;
+                        eg_dividendo += ds.ElementosGruesos * par.Key.superficie;
+                        mo_dividendo += ds.MateriaOrganica * par.Key.superficie;
+                    }
+                    totalSuperfieConDatosEnHorizonte += par.Key.superficie;
+                }
+                // Efitar división por cero.En este caso todos los valores será cero
+                if (totalSuperfieConDatosEnHorizonte == 0)
+                    totalSuperfieConDatosEnHorizonte = 1;
+                var reg = new DatosSuelo {
+                    ProfundidadCM = hEstudio,
+                    Superficie = totalSuperficie,
+                    Arena = arena_dividendo / totalSuperfieConDatosEnHorizonte,
+                    Limo = limo_dividendo / totalSuperfieConDatosEnHorizonte,
+                    Arcilla = arcilla_dividendo / totalSuperfieConDatosEnHorizonte,
+                    ElementosGruesos = eg_dividendo / totalSuperfieConDatosEnHorizonte,
+                    MateriaOrganica = mo_dividendo / totalSuperfieConDatosEnHorizonte,
+                    IdParcelaInt = -1
+                };
+                ret.Add(reg);
+                hAnt = hEstudio;
+                var lSigH = lDatosSueloParcelas.Where(x => x.ProfundidadCM > hAnt);
+                if (lSigH.Any())
+                    hEstudio = lSigH.Min(x => x.ProfundidadCM);
+                else
+                    hEstudio = -1;
+            }
+            if (ret.Count == 0)
+                throw new Exception($"No se encontraron datos de suelo para la unidad de cultivo: '{idUC}' en la temporada: '{idTemporada}'");
+            return ret;
+        }
+
+
     }
 }

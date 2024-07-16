@@ -37,7 +37,7 @@ namespace webapi
             DB.PathRoot = Path.GetFullPath(System.Web.Hosting.HostingEnvironment.MapPath("~/") + @"..\");
             //DB.DatosClimaticosSiarForceRefresh();
             //DB.ActulizaEstacionParcelas();
-
+            //DB.ActulizaDatosGeoParcelas();
             // Para caltular el centro de las parcelas
             //update Parcela set latitud =geo.STCentroid().STY , longitud= geo.STCentroid().STX  where latitud is null;
 #if DEBUG

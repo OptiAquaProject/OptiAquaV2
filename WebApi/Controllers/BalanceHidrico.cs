@@ -5,6 +5,7 @@
     using System.Security.Claims;
     using System.Threading;
     using System.Web.Http;
+    using webapi.Utiles;
 
     /// <summary>
     /// Proporciona información del balance hídrico
@@ -19,10 +20,10 @@
         /// <returns></returns>
         [Route("api/balancehidrico/{idUnidadCultivo}/{fecha}/{actualizaFechasEtapas}")]
         public IHttpActionResult GetBalanceHidrico(string idUnidadCultivo, string fecha, bool actualizaFechasEtapas) {
-            try {               
+            try {
                 return CacheDatosHidricos.Cache(Request.RequestUri.AbsolutePath, () => {
                     BalanceHidrico bh = BalanceHidrico.Balance(idUnidadCultivo, DateTime.Parse(fecha), actualizaFechasEtapas);
-                    var ret = Json(bh.LineasBalance);                    
+                    var ret = Json(bh.LineasBalance);
                     return ret;
                 });
 
@@ -37,7 +38,7 @@
         /// <param name="idUnidadCultivo"></param>
         /// <param name="fecha"></param>
         /// <returns></returns>
-        [Authorize]
+        //[Authorize]
         [Route("api/DatosHidricos/{idUnidadCultivo}/{fecha}")]
         public IHttpActionResult GetDatosHidricos(string idUnidadCultivo, string fecha) {
             try {
@@ -48,7 +49,7 @@
                 string idTemporada = DB.TemporadaDeFecha(idUnidadCultivo, dFecha);
                 if (!DB.EstaAutorizado(idUsuario, role, idUnidadCultivo, idTemporada))
                     return Unauthorized();
-                return CacheDatosHidricos.Cache(Request.RequestUri.AbsolutePath+"Usuario"+idUsuario.ToString(), () => {
+                return CacheDatosHidricos.Cache(Request.RequestUri.AbsolutePath + "Usuario" + idUsuario.ToString(), () => {
                     BalanceHidrico bh = BalanceHidrico.Balance(idUnidadCultivo, dFecha);
                     return Json(bh.DatosEstadoHidrico(dFecha));
                 });
@@ -76,9 +77,9 @@
                 int idUsuario = int.Parse(identity.Claims.SingleOrDefault(c => c.Type == "IdRegante").Value);
                 string role = identity.Claims.SingleOrDefault(c => c.Type == ClaimTypes.Role).Value;
 
-                return CacheDatosHidricos.Cache(Request.RequestUri.AbsolutePath+"Usuario"+idUsuario, () => {
+                return CacheDatosHidricos.Cache(Request.RequestUri.AbsolutePath + "Usuario" + idUsuario, () => {
                     object lDatosHidricos = BalanceHidrico.DatosHidricosList(idRegante, idUnidadCultivo, idMunicipio, idCultivo, fecha, role, idUsuario);
-                    return  Json(lDatosHidricos);                    
+                    return Json(lDatosHidricos);
                 });
 
             } catch (Exception ex) {
@@ -92,7 +93,7 @@
         /// <param name="idUnidadCultivo"></param>
         /// <param name="fecha"></param>
         /// <returns></returns>
-        [Authorize]
+        //[Authorize]
         [Route("api/Riegos/{idUnidadCultivo}/{fecha}")]
         public IHttpActionResult GetRiegos(string idUnidadCultivo, string fecha) {
             try {
@@ -101,13 +102,13 @@
                 if (idTemporada == null)
                     return BadRequest("La unidad de cultivo no está definida para la temporada");
 
-                ClaimsIdentity identity = Thread.CurrentPrincipal.Identity as ClaimsIdentity;
+                ClaimsIdentity identity = Thread.CurrentPrincipal.Identity as ClaimsIdentity;                
                 int idUsuario = int.Parse(identity.Claims.SingleOrDefault(c => c.Type == "IdRegante").Value);
                 string role = identity.Claims.SingleOrDefault(c => c.Type == ClaimTypes.Role).Value;
                 if (!DB.EstaAutorizado(idUsuario, role, idUnidadCultivo, idTemporada))
                     return Unauthorized();
 
-                return CacheDatosHidricos.Cache(Request.RequestUri.AbsolutePath+"Usuario"+idUsuario.ToString(), () => {
+                return CacheDatosHidricos.Cache(Request.RequestUri.AbsolutePath + "Usuario" + idUsuario.ToString(), () => {
                     return Json(DB.DatosRiegosList(idUnidadCultivo, idTemporada));
                 });
 
@@ -154,7 +155,6 @@
         public IHttpActionResult ResumenDiario(string idUnidadCultivo, string fecha) {
             try {
                 DateTime dFecha = DateTime.Parse(fecha);
-
                 return CacheDatosHidricos.Cache(Request.RequestUri.AbsolutePath, () => {
                     BalanceHidrico bh = BalanceHidrico.Balance(idUnidadCultivo, dFecha);
                     System.Web.Http.Results.JsonResult<Models.ResumenDiario> ret = Json(bh.ResumenDiario(dFecha));
@@ -173,6 +173,23 @@
             try {
                 CacheDatosHidricos.RecreateAll();
                 return Json("OK");
+            } catch (Exception ex) {
+                CacheDatosHidricos.recalculando = false;
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [AllowAnonymous]
+        [HttpGet]
+        [Route("api/UnidadCultivoSuelo/{idUnidadCultivo}/{idTemporada}")]
+        public IHttpActionResult UnidadCultivoSuelo(string idUnidadCultivo, string idTemporada) {
+            try {
+                var lds=DB.UnidadCultivoSueloListNew(idUnidadCultivo.Unquoted(), idTemporada.Unquoted());
+                if (lds != null && lds.Count > 0) {
+                    var lRet = lds.Select(x => new { x.Arcilla, x.Arena, x.Limo, x.MateriaOrganica, x.ElementosGruesos, x.ProfundidadCM});
+                    return Json(lRet);
+                } else
+                    return Json("No se encontraron valores de suelo");
             } catch (Exception ex) {
                 CacheDatosHidricos.recalculando = false;
                 return BadRequest(ex.Message);

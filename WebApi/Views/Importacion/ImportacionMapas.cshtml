@@ -21,22 +21,22 @@
 <div class="row">
     <div class="col-md-12">
         <h2>Lista de mapas importados.</h2>
-        <p class="lead">Lista de los mapas [Base] y [Catastrales] ya importados</p>
+        <p class="lead">Lista de los mapas en optiaqua</p>
 
         <table class="table">
             <tr>
                 <td><b>Version</b></td>
-                <td><b>Reg. Base</b></td>
-                <td><b>Reg. Catastral</b></td>
+                <td><b>Nivel</b></td>
+                <td><b>Registros</b></td>
                 <td><b>Eliminar</b></td>
             </tr>
             @foreach (var mapa in lMapaVersion) {
                 <tr>
                     <td>@mapa.IdVersion</td>
-                    <td>@mapa.nRegBase</td>
-                    <td>@mapa.nRegCatastral</td>
+                    <td>@mapa.Nivel</td>
+                    <td>@mapa.NumRegistros</td>
                     <td>
-                        <button type="submit" class="btn btn-outline-danger" onclick="ConfirmarEliminacion('@mapa.IdVersion')">Eliminar versión</button>
+                        <button type="submit" class="btn btn-outline-danger" onclick="ConfirmarEliminacion('@mapa.IdVersion','@mapa.Nivel')">Eliminar versión</button>
                     </td>
                 </tr>
 
@@ -51,23 +51,28 @@
     <div class="col-md-12">
         <h2>Importación de mapas.</h2>
         <p class="lead">
-            En esta sección puede importar nuevos mapas [Base] y [Catastral] en formato .gpkg según especificación versión v1.<br />
-            Si se indica un nombre de versión que ya existe, se eliminará completamente la versión previa y se importará la nueva versión.<br />
+            En esta sección puede importar nuevos mapas en formato .gpkg según especificación versión v2.<br />
+            Si se indica un mapa con una versión y nivel ya existente, se eliminarán anteriores datos de version y nivel<br />
             Para hacer uso del mapa importado indique la versión en el Campo 'IdVersionMapa' en la tabla 'Temporada.'
         </p>
-        <div class="mt-3">
-            <label for="formFileBase" class="form-label">Seleccione fichero de base</label>
-            <input class="form-control" type="file" id="formFileBase" name="fileBase">
+
+        <div class="mt-3 col-sm-4">
+            <label for="formFileBase" class="form-label">Version</label>
+            <input type="text" class="form-control" name="idVersion" id="formIdVersion">
+        </div>
+
+        <div class="mt-3 col-sm-4">
+            <label for="formFileBase" class="form-label">Nivel</label>
+            <input type="number" class="form-control" name="Nivel" id="formNivel">
         </div>
 
         <div class="mt-3 mb-3">
-            <label for="formFileCatastral" class="form-label">Selecciones fichero catastral</label>
-            <input class="form-control" type="file" id="formFileCatastral" name="fileCatastral">
+            <label for="formFileCatastral" class="form-label">Selecciones fichero gpkg</label>
+            <input class="form-control" type="file" name="fileMapa" id="formFileMapa">
         </div>
 
         <div class="input-group mb-3">
-            <button class="btn btn-outline-success" type="submit" id="button-addon1" onclick="BtnImportar()">Importar mapas</button>
-            <input type="text" class="form-control" placeholder="Identificador de versión" name="idVersion" id="formIdVersion">
+            <button class="btn btn-outline-success" type="submit" id="button-addon1" onclick="BtnImportar()">Importar mapa</button>
         </div>
 
     </div>

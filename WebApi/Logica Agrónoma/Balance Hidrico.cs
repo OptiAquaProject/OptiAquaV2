@@ -391,7 +391,7 @@
                 IdUnidadCultivo = unidadCultivoDatosHidricos.IdUnidadCultivo,                
                 IdRegante = unidadCultivoDatosHidricos.IdRegante,
                 IdEstacion = unidadCultivoDatosHidricos.IdEstacion,
-                Estacion = unidadCultivoDatosHidricos.IdEstacion.ToString(),
+                Estacion = DB.EstacionNombre(unidadCultivoDatosHidricos.IdEstacion),
                 SumaLluvia = SumaLluvias(fecha),
                 SumaRiego = SumaRiegosMm(fecha),
                 AguaUtil = AguaUtil(fecha),

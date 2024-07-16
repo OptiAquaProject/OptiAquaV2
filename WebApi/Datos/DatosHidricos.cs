@@ -324,7 +324,7 @@
             
             regante = (Regante)DB.Regante(unidadCultivoCultivo.IdRegante);
 
-            ListaUcSuelo = DB.ParcelaSueloList(idUnidadCultivo,idTemporada);            
+            ListaUcSuelo = DB.UnidadCultivoSueloListNew(idUnidadCultivo,idTemporada);            
             if (ListaUcSuelo == null || ListaUcSuelo.Count==0)
                 throw new Exception("No se ha definido suelo para la unidad de Cultivo:" + idUnidadCultivo);
 

@@ -1,6 +1,9 @@
 ﻿using NPoco;
+using Org.BouncyCastle.Crypto;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Security.Policy;
 
 /// <summary>
 /// Modelo de datos de la aplicación
@@ -105,39 +108,6 @@ namespace Models {
         public double Eto { get; set; }
     }
 
-    public class RootApiSiar {
-        public List<DatoClimaticoApiSiar> data { get; set; }
-    }
-
-    public class DatoClimaticoApiSiar {
-        public DateTime Fecha { get; set; }
-        public string Estacion { get; set; }
-        public string TAirMd { get; set; }
-        public string HRMn { get; set; }
-        public string PAcum { get; set; }
-        public string ET0 { get; set; }
-        public string VWindMd { get; set; }
-    }
-
-
-
-
-    [TableName("Estacion")]
-    [PrimaryKey("IdEstacion", AutoIncrement = false)]
-    public class Estacion_SIN_USO {
-        private int IdEstacion { get; set; }
-        private string Nombre { get; set; }
-        private int IdRed { get; set; }
-        private byte IdProvincia { get; set; }
-        private int IdTermino { get; set; }
-        private int? Longitud { get; set; }
-        private int? Latitud { get; set; }
-        private int? XUTM { get; set; }
-        private int? YUTM { get; set; }
-        private int? Huso { get; set; }
-        private double? Altitud { get; set; }
-    }
-
     [TableName("ParcelaSuelo")]
     [PrimaryKey("IdParcelaInt,IdHorizonte", AutoIncrement = false)]
     public class ParcelaSuelo {
@@ -151,6 +121,19 @@ namespace Models {
         public double MateriaOrganica { get; set; }
     }
 
+    public class DatosSueloDB {
+        public int IdParcelaInt { get; set; }
+        public double? ProfundidadCMInicial { get; set; }
+        public double? ProfundidadCMFinal { get; set; } 
+        public double? ElementosGruesos { get; set; }
+        public double? Limo { get; set; }
+        public double? Arcilla { get; set; }
+        public double? Arena { get; set; }
+        public double? MateriaOrganica { get; set; }        
+        public int Nivel { get; set; }
+        public bool EsHorizonteControl { get; set; }
+    }
+
     public class DatosSuelo {
         public int IdParcelaInt { get; set; }
         public double ProfundidadCM { get; set; } // distancia desde superficie (se acumulan la profundidad de los horizontes
@@ -160,6 +143,9 @@ namespace Models {
         public double Arcilla { get; set; }
         public double Arena { get; set; }
         public double MateriaOrganica { get; set; }
+        public string IdVersion { get; set; }
+        public int Nivel { get; set; }
+        public int ID { get; set; }
     }
 
     [TableName("UnidadCultivoDatosExtra")]
@@ -191,7 +177,7 @@ namespace Models {
 
     [TableName("Parcela")]
     [PrimaryKey("IdParcelaInt", AutoIncrement = false)]
-    public class Parcela {
+    public class ParcelaPoco {
         public int IdParcelaInt { get; set; } // nvarchar(10), not null
         public int? IdRegante { get; set; } // int, null
         public int? IdProvincia { get; set; } // nchar(2), not null
@@ -689,6 +675,19 @@ namespace Models {
     public class EventosPoco {
         public int IdEvento { get; set; }
         public string Evento { get; set; }
+    }
+
+    
+    public class SigPacDBPoco {
+        public string id { get; set; }
+        public int provincia { get; set; }
+        public int municipio { get; set; }
+        public int poligono { get; set; }
+        public int parcela { get; set; }
+        public int recinto { get; set; }
+        public decimal superficie { get; set; }
+        public string geom { get; set; }
+        public string wkt { get; set; }
     }
 }
 

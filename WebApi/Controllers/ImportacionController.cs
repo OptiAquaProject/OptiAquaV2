@@ -45,26 +45,19 @@
             try {
                 if (Request.Files.Count == 0)
                     return "KO";
-                HttpPostedFileBase fileBase = Request.Files[0];
-                HttpPostedFileBase fileCatastral = Request.Files[1];
+                HttpPostedFileBase fileBase = Request.Files[0];                
 
                 var fileNameBase = DB.PathRoot + DateTime.Now.Ticks.ToString() + Path.GetExtension(fileBase.FileName);
                 fileBase.SaveAs(fileNameBase);
 
-                var fileNameCatastral = DB.PathRoot + DateTime.Now.Ticks + 1.ToString() + Path.GetExtension(fileCatastral.FileName);
-                fileCatastral.SaveAs(fileNameCatastral);
-
                 var idVersion = HttpContext.Request.Params["idVersion"];
-                var fb = HttpContext.Request.Params["fileBase"];
-                DB.EliminarMapas(idVersion);
-                var err = ImportMapas.ImportarMapaBase(fileNameBase, idVersion);
-                if (!string.IsNullOrWhiteSpace(err))
-                    return err;
-                err = ImportMapas.ImportarMapaCatastral(fileNameCatastral, idVersion);
+                var nivel = int.Parse( HttpContext.Request.Params["nivel"]);
+                var fb = HttpContext.Request.Params["fileMapa"];
+                DB.EliminarMapas(idVersion,nivel);
+                var err = ImportMapas.ImportarMapaSuelo(fileNameBase, idVersion,nivel);
                 if (!string.IsNullOrWhiteSpace(err))
                     return err;
                 System.IO.File.Delete(fileNameBase);
-                System.IO.File.Delete(fileNameCatastral);
                 return "OK";
             } catch (Exception ex) {
                 return "KO";
@@ -73,8 +66,9 @@
 
         [HttpPost]
         public string EliminarMapas() {
-            var idVersion = HttpContext.Request.Params["paramJson"];
-            DB.EliminarMapas(idVersion);
+            var idVersion = HttpContext.Request.Params["paramJson[idVersion]"];
+            var nivel = int.Parse(HttpContext.Request.Params["paramJson[nivel]"]) ;
+            DB.EliminarMapas(idVersion,nivel);
             return "OK";
         }
 
